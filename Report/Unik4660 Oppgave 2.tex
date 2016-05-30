@@ -1,0 +1,296 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[latin1]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage{grffile}
+
+\addtolength{\oddsidemargin}{-.875in}
+\addtolength{\evensidemargin}{-.875in}
+\addtolength{\textwidth}{1.75in}
+
+\addtolength{\topmargin}{-.875in}
+\addtolength{\textheight}{1.75in}
+
+\title{UNIK 4660 - Oppgave 2 \\ Dang Ha The Hien}
+
+\begin{document}
+	\maketitle
+	\section{Introduction}
+	Since I have implemented some extra things which are not included in the assignment, I think it is a good idea to have a summary table of my code first. Here you will find a short explanation for each function.  For the sake of simplicity, some functions' parameters are fixed as constant inside the implementation. HSV colormap is used in most cases, which must be converted to RGB when plotting with imshow(). All of the techniques implemented in this project are resolution-independent.	\\
+	
+	\begin{tabular}{p{0.05cm} p{5cm}|p{10cm}}
+		\hline \multicolumn{2}{l|}{\bf{General Functions:}} &\\ 
+		\hline
+			 	& demo.m & Demo all functionalities of this project. Please run each demo separately or it can crash your machine\\ 
+			 	& readData.m &  Load the two fields stored in HDF5 into Matlab environment. \\
+			 	& plotVectorField.m & Plot vector field with small brushstrokes\\
+			 	& interpolateVector.m & Bilinear interpolate vector field, return 0 for out of bound.\\
+			 	& normalizeField.m & Normalize vector field to unit length, too small vectors become 0\\
+		\hline \multicolumn{2}{l|}{\bf{Numerical Integrator:}} &\\ 
+		\hline
+			   & forwardEuler.m &  Forward Euler algorithm. Options: step\_size, max\_length \\ 
+			   & rungeKutta.m &  4th order Runge-Kutta. Same above options\\ 
+			   & adaptiveRungeKutta.m & Adaptive Runge-Kutta. More options: return evenly spaced or not, and minimum arc length of each step.\\ 
+		\hline \multicolumn{2}{l|}{\bf{Plot streamlines:}} & \\ 
+		\hline
+			   & plotStreamLinesGrid.m & Seed points taken from a grid\\
+			   & plotStreamLinesPoisson.m & Seed points generated with Poisson Disc \\
+			   & plotStreamLinesProp.m & Seed points distributed by a degree of interest scalar field\\
+			   & plotStreamLinesTopobased.m & Seed points chosen using topology info\\
+		\hline \multicolumn{2}{l|}{\bf{Line Integral Convolution}} & \\ 
+		\hline
+			   & lineInterConv.m & LIC, can use any numerical integrator. Many algorithm parameters are fixed and must be configured inside the function\\
+		\hline \multicolumn{2}{l|}{\bf{Illuminated Stream Lines:}} & \\ 
+		\hline
+			   & computeIlluminateTextureMap.m & Compute the illuminated texture map\\
+			   & plotIlluminatedLines.m & Plot illuminated lines with fixed view and light source \\
+			   & animateStreamLine.m & Produce animated illuminated lines\\
+		\hline \multicolumn{2}{l|}{\bf{Vortex and Criticals}} & \\ 
+		\hline
+				& calProperty.m & Can calculate Enstrophy, Q\_criteria, Vector magnitude, and Topological Degree\\
+				& classifyCritical.m & Classify critical points using Trace-Determinants plane\\
+		\hline \multicolumn{2}{l|}{\bf{Ultility External Functions:}} & \\ 
+		\hline
+				& generate\_poisson\_2d.m & (downloaded) Generate poisson disc in 2D\\
+				& bitmapplot.m & (downloaded) Draw lines onto bitmap\\
+				& bitmaptext.m & (downloaded) Draw texts onto bitmap\\
+
+	\end{tabular} 
+	\section{Exercise 1:}
+		Three numerical integrators are implemented for this project: \emph{forward Euler}, \emph{4th order Runge-Kutta}, and \emph{adaptive Runge-Kutta}\footnote{fixed TOL = 0.001, rho = 1}. I first test the accuracy and performance of those algorithms by drawing single stream line on the isabel dataset. The best algorithm (which is the adaptive Runge-Kutta) is then used by default in all further experiments if nothing stated. Most of the function has a function handler as a parameter that you can select what integrator to be used.
+		\subsection{Plotting Single Stream Line}
+		Figure \ref{fig:oneStreamLine} shows the experiment result when drawing a single stream line start at the same seed point $(500, 500)$. The output resolution is $(700, 700)$. Maximum length is fixed at $2000$, which allows the stream line to grow fully. Note that I do not check if the streamline repeats itself.
+		
+		The three algorithms produce almost identical results when step size is small $(h = 0.5)$. However, when we increase the step size to $h = 10$, the Euler forward algorithm works poorly when the stream line's curvature is high, which is expected. The RK4 is working correctly in both cases, since the affective step size is not equal to $h$. However, RK4 is very slow compared to Euler (at least 4 times)
+		
+		The adaptive RK4 is step size independent, and produces accurate field line with very few sample points and very high performance. In our experiment, the number of sample points in adaptiveRK4 is usually 10-50 times smaller than in Euler method. This excellent property makes adaptive RK4 ideal for many visualization task, such as illuminated stream lines where the complexity of the algorithm depends on the number of sample points. Note that in the LIC algorithm, we need evenly-spaced field lines. Therefore we need to interpolate the field line produced by RK4. I use linear instead of Hermite interpolation as suggested in the fast LIC paper for the sake of simplicity. This hurts the performance and accuracy of the adaptive RK4 algorithm pretty much, as explained later in the next section.
+		
+		\begin{figure*}
+			\centering
+			\subfloat[Euler Forward h = 0.5\label{fig:euler0.5}]{
+				\includegraphics[width=.5\linewidth]{Figures/SingeStreamlines/{forwardEuler_0.5}}
+			}
+			\subfloat[Runge-Kutta h = 0.5\label{fig:RK0.5}]{
+				\includegraphics[width=.5\linewidth]{Figures/SingeStreamlines/{RungeKutta_0.5}}
+			}
+			
+			\subfloat[Euler Forward h = 10\label{fig:euler10}]{
+				\includegraphics[width=.5\linewidth]{Figures/SingeStreamlines/{forwardEuler_10}}
+			}
+			\subfloat[Runge-Kutta h = 10\label{fig:RK10}]{
+				\includegraphics[width=.5\linewidth]{Figures/SingeStreamlines/{RungeKutta_10}}
+			}
+			
+			\subfloat[Adaptive Runge-Kutta\label{fig:adaptiveRK}]{
+				\includegraphics[width=.5\linewidth]{Figures/SingeStreamlines/{adaptiveRungeKutta}}
+			}
+			\caption{Experiment with three different numerical integrator methods, using different step size.}
+			\label{fig:oneStreamLine}
+		\end{figure*}
+
+		\subsection{Plotting Stream Lines Using Different Seed Points Strategy}
+			I implemented 4 different seed points strategy, including \emph{rectangular grid}, \emph{Poisson disc}, \emph{degree of interest}, and \emph{topology-based}.
+			\begin{itemize}
+				\item \emph{Rectangular grid}: seed points are taken from a rectangular grid.
+				\item \emph{Poisson disc}: seed points are generated using Poisson disc distribution, which creates random but even coverage seed points. Note that I do not implement the Poisson disc sampling algorithm myself.
+				\item \emph{Degree of interest}: one can choose any scalar field to be the degree of interest. I used velocity magnitude and enstrophy in this experiment. Monte Carlo sampling process is used to sample seed points from that degree of interest.
+				\item \emph{Topology-based}: since the topological degree algorithm does not guaranteer to only catch critical points (especially in the isabel dataset), I select those critical points manually. This method generates seed points based on the types of critical points.
+			\end{itemize}
+			Since there would be too many figures to plot, I only use adaptive RK4 in this experiment. One can easily change the numerical integrator as demonstrated in the \emph{demo.m} file. Figure \ref{fig:StreamLinesIsabel} shows stream lines of the isabel dataset using different seed point strategy, while \ref{fig:StreamLinesMetsim1} shows the same result for the metsim1 dataset. Figure \ref{fig:StreamLinesVaryingLength} shows isabel's stream lines with different length using Poisson disc method.
+			
+			\emph{Conclusion:} the stream line visualization technique depends heavily on the seed points selection. The stream line density varies very much even with the same seed point density, depending on the topology of the vector field. Therefore, the topology-based technique produces stream lines with nicer density and focuses more on the critical points. I believe that the evenly spaced stream line algorithm can produce much better visualization, since we can control the stream lines density directly. However, I could not get it done for this project, because we must use an implementation trick to quickly check if a new sample point is far enough from all selected sample points, which is hard to integrate into my program flow.
+			
+			\begin{figure*}
+				\centering
+				\subfloat[Rectangular grid]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{grid}}
+				}
+				\subfloat[Poisson disc]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{poisson}}
+				}
+				
+				\subfloat[Velocity magnitude as degree of interest]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{doi_velocity}}
+				}
+				\subfloat[Enstrophy as degree of interest]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{doi_enstrophy}}
+				}
+				
+				\subfloat[Topology-based]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{topo}}
+				}
+				\subfloat[Topology-based together with Poisson disc]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{topo_poisson}}
+				}
+				\caption{Stream lines of isabel dataset, drawn with different seeds point strategy}
+				\label{fig:StreamLinesIsabel}
+			\end{figure*}
+			
+			\begin{figure*}
+				\centering
+				\subfloat[Rectangular grid]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{metsim1_grid}}
+				}
+				\subfloat[Poisson disc]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{metsim1_poisson}}
+				}
+				
+				\subfloat[Velocity magnitude as degree of interest]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{metsim1_doi_velocity}}
+				}
+				\subfloat[Enstrophy as degree of interest]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{metsim1_doi_enstrophy}}
+				}
+				
+				\subfloat[Topology-based]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{metsim1_topo}}
+				}
+				\caption{Stream lines of metsim1 dataset, drawn with different seeds point strategy. Note that the images are the transposed versions of the one presented in the assignment. I do not know the exact reason but it could be because of the imshow() function in matlab}
+				\label{fig:StreamLinesMetsim1}
+			\end{figure*}
+			
+			\begin{figure*}
+				\centering
+				\subfloat[Poisson disc with max length = 50]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{poisson_50}}
+				}
+				\subfloat[Poisson disc with max length = 100]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{poisson_100}}
+				}
+				
+				\subfloat[Poisson disc with max length = 200]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{poisson_200}}
+				}
+				\subfloat[Poisson disc with max length = 300]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{poisson_300}}
+				}
+				
+				\subfloat[Poisson disc with max length = 2000]{
+					\includegraphics[width=.5\linewidth]{Figures/Streamlines/{poisson}}
+				}
+				\caption{Stream lines of isabel dataset using Poisson disc seed point distribution with different max length}
+				\label{fig:StreamLinesVaryingLength}
+			\end{figure*}
+		\clearpage	
+		\section{Exercise 2 - Line Integration Convolution:}
+		\subsection{Introduction}
+			LIC is a texture-based, popular, and powerful algorithm that can be used to visualize vector field. It takes a (usually) random white noise input texture, and perform one-dimensional convolution (i.e. blurring or defusing) at every pixel, along the stream line starting from that pixel in both positive and negative directions. As a result, the image after blurring has the intensity values that strongly correlated along each stream line, and no correlation between neighboring stream lines
+			
+			The formal convolution process is done in the following way. We are about to compute the intensity for a pixel at $x_0$. There is a stream line $\sigma$ going through that point at $x_0 = \sigma(s_0)$. Given a symmetric\footnote{if we use anisotropic convolution kernel instead of a symmetric one, we get the Oriented LIC algorithm} kernel function $k()$ which is already normalized to unity, the intensity of the pixel $x_0$ is computed as:
+			\begin{equation}
+				I(x_0) = \int_{s_0 - L}^{s_0+L}k(s-s_0)T(\sigma(s)) ds.
+			\end{equation}
+			with $T$ is the input random texture and $2L$ is the filter length. The original LIC algorithm evaluates the above formula for every pixels, which is very time consuming. In my implementation, I use fast LIC technique to speed up the process.
+		\subsection{My fast LIC implementation}
+			I followed most of the guidelines suggested in the fast LIC paper [Detlev.S, Hans.C.H et. al.]. I first subdivide the image into smaller blocks (25x25 in this case), and run the fast LIC for the first pixel of each block, then the second, and so on. This is done to minimize the total number of stream lines to be evaluated. For each pixel, if that pixel has not been hit yet (I set minNumHits = 1), I initiate a stream line starting at the center of that pixel to both direction with the length equal to $L + M$ for each side. With $2L$ is the filter length and set to 1/10th of the image width by default. Varying this parameter yield different result, as shown in the next subsection. $M$ is the maximum steps that we can shift the kernel along the stream line (in both direction) to incrementally compute the intensity of pixels along that stream line. $M$ is fixed at $100$ at the beginning, and set to $0$ when more than $90\%$ pixels have been hit. I use a constant filter kernel, which allows us to shift the kernel easily. The step size is fixed at $h_t = 0.5$.
+			
+			I use adaptive RK4 integrator, which is fast and has error control. However, I use linear interpolation instead of cubic Hermite as suggested in the paper. In fact, I believe this is the only difference in my implementation. This linear interpolation process make adaptive RK4 become slower than forward Euler for this task. The RK4 is simply too slow for this task.
+		\subsection{LIC Results}
+			Table \ref{tab:LIC_performance} shows the performance of LIC using Euler forward and adaptive RK4. I did not run the RK4, since it is just too slow. The adaptive RK4 is a bit slower than the Euler, without giving any obvious improvement on the visualization. This is because linear interpolation is used to create evenly spaced sample points, which costs extra computation and introduces extra errors.
+			
+			Obviously, decreasing filter length L will speed up the algorithm. However, the lower L, the noisier the image, since the filter length is not big enough to maintain strong correlation along each stream line. This affect is obvious in figure \ref{fig:LIC}
+			\begin{table}
+				\centering
+				\begin{tabular}{l|c|c}
+					 \bf{LIC Performance} & Isabel 700x700 & Metsim1 300x300 \\ 
+					 Euler - L default & 111.7s & 14s \\ 
+					 Euler - L = 15 & 62.4s & Not done \\ 
+					 \hline Adaptive RK4 - default  & 158.0s & 29.2s \\ 
+					 Adaptive RK4 - L = 15 & 86.5s  & Not done \\ 
+					 \hline RK4 - L default & \multicolumn{2}{c}{Too slow!} \\
+					 \label{tab:LIC_performance}
+				\end{tabular} 
+				\caption{Table comparing LIC performances}
+			\end{table}
+			\begin{figure*}
+				\centering
+				\subfloat[LIC Euler Forward on isabel - L default]{
+					\includegraphics[width=.5\linewidth]{Figures/LIC/{isabel_Euler_Ldefault}}
+				}
+				\subfloat[LIC Euler Forward on isabel - L=15]{
+					\includegraphics[width=.5\linewidth]{Figures/LIC/{isabel_Euler_L15}}
+				}
+				
+				\subfloat[LIC Adaptive RK4 on isabel - L default]{
+					\includegraphics[width=.5\linewidth]{Figures/LIC/{isabel_adaptiveRK4_Ldefault}}
+				}
+				\subfloat[LIC Adaptive RK4 on isabel - L=15]{
+					\includegraphics[width=.5\linewidth]{Figures/LIC/{isabel_adaptiveeRK4_L15}}
+				}
+				
+				\subfloat[LIC Euler Forward on metsim1 - L default]{
+					\includegraphics[width=.5\linewidth]{Figures/LIC/{metsim1_Euler_Ldefault}}
+				}
+				\subfloat[LIC Adaptive RK4 on metsim1 - L default]{
+					\includegraphics[width=.5\linewidth]{Figures/LIC/{metsim1_adaptiveRK4_Ldefault}}
+				}
+				\caption{LIC results using different options. The same input textures are used for each dataset}
+				\label{fig:LIC}
+			\end{figure*}
+		\subsection{Comparing geometric field lines and LIC texture}
+			In my opinion, LIC is the more general technique, which can produce high quality visualization for any vector field using default options, regardless of its topological structure.
+			
+			On the other hand, the geometric field lines techniques depends heavily on the way the seed points are chosen, which in turn depends on the topological structure of the field lines. In my opinion, the geometric approach is harder to use correctly. However, when using it correctly, it can highlight important features and structures of the field. The geometric approach is also more flexible, which can be changed to focus on different aspects of the field, and can be adapted to different use cases.
+			
+	\section{Extras}
+		Besides the geometric field lines and LIC techniques, I have also implemented several interesting algorithms. In this section, I will give short explanations and results of some experiments.
+		\subsection{Vorticity}
+		The Q criterion and enstrophy are used to identify the vortex. Since the range of enstrophy is very big, plotting the square root of enstrophy produces better visualization. The Q criterion does not have this issue. Figure \ref{fig:Vortex} shows a nice visualization of Q and enstrophy for the isabel dataset. We see that the vortex sheets are visible when using enstrophy, but absent when using Q criterion.
+		
+		\begin{figure*}
+			\centering
+			\subfloat[Enstrophy of isabel dataset]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{Enstrophy}}
+			}
+			\subfloat[Sqrt of enstrophy ]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{Enstrophy_sqrt}}
+			}
+			
+			\subfloat[Q criterion of isabel dataset]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{Q_criterion}}
+			}
+			\subfloat[Sqrt of Q criterion]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{Q_criterion_sqrt}}
+			}
+			\caption{Vortex identification using enstrophy and Q criterion}
+			\label{fig:Vortex}
+		\end{figure*}
+		\subsection{Topological Degree}
+		I also calculate the topological degree to identify critical points in the vector field. Unfortunately, the algorithm produce many false detections for the isabel dataset, probably because of the zero velocity area. I also use the trace determinant and delta of the gradient tensor to classify the critical points.
+		
+		\begin{figure*}
+			\centering
+			\subfloat[Points with $>0$ topological degree are marked]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{TopoDegree}}
+			}
+			\subfloat[Critical point classification ]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{ClassifyCriticalPoints}}
+			}
+			\caption{Topological degree and critical point classification}
+			\label{fig:topodegree}
+		\end{figure*}
+		
+		\subsection{Illuminated Stream Lines}
+		The illuminated stream lines algorithm is also implemented. I assume the stream lines are placed on the plane $z = 0$ and the view point is at the middle and above the field. Moving the light source will lead to different results, as demonstrated in figure \ref{fig:ISL}.
+		
+		\begin{figure*}
+			\centering
+			\subfloat[The t1-t2 texture map]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{TextureMap_T1_T2}}
+			}
+			
+			\subfloat[Light source is at $(0, 0)$ ]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{ISL_VmiddleL00}}
+			}
+			\subfloat[Light source is at the view point (head light) ]{
+				\includegraphics[width=.5\linewidth]{Figures/Extras/{ISL_VmiddleLmiddle}}
+			}
+			\caption{Illuminated Stream Lines}
+			\label{fig:ISL}
+		\end{figure*}
+		\subsection{Animated Stream Lines}
+		I also implement the animated stream lines, following the suggestion in the illuminated stream line paper. Please check the file 'Animated\_ISL.mp4' file in the Reports/Figures folder.
+\end{document}
